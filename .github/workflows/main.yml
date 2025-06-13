@@ -1,0 +1,9 @@
+on:
+    workflow_call:
+
+jobs:
+    call-push-wecom-on-label:
+        uses: ./.github/workflows/push_wecom_on_label.yml
+
+    call-ai-code-review.yml:
+        uses: ./.github/workflows/ai_code_review.yml.yml
