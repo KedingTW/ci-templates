@@ -13,6 +13,9 @@ jobs:
       token: ${{ secrets.token }}
 
   call-ai-code-review:
+    permissions:
+      contents: read
+      pull-requests: write
     uses: ./.github/workflows/ai_code_review.yml
     secrets:
       token: ${{ secrets.token }}
