@@ -41,11 +41,20 @@ def collectPrDiff(pr):
             diff += f"\n\n### {file.filename}\n{file.patch}"
     return diff
 
-# 收集 PR diff
-diff = collectPrDiff(pr)
+def is_frontend_repo(repo_name):
+    """判斷是否為前端專案"""
+    # 根據 repo 名稱判斷是否為前端專案
+    frontend_keywords = [
+        'frontend', 'front-end', 'web', 'ui', 'vue', 'react', 
+        'angular', 'nuxt', 'next', 'client', 'app', 'portal'
+    ]
+    
+    repo_name_lower = repo_name.lower()
+    return any(keyword in repo_name_lower for keyword in frontend_keywords)
 
-# 設定提示詞
-prompt = f"""
+def get_backend_prompt(diff):
+    """取得後端程式碼審查的 prompt"""
+    return f"""
 你是一位經驗豐富的軟體工程師，專長於程式碼審查。請協助我審查以下 Pull Request 的程式碼差異（diff），並以繁體中文回覆審查建議。
 
 請**聚焦於本次 PR 的變更內容**，並依下列稽核面向給予具體建議。請條列清楚，必要時可附上簡短程式碼範例協助理解。
@@ -103,6 +112,85 @@ prompt = f"""
 
 {diff}
 """
+
+def get_frontend_prompt(diff):
+    """取得前端程式碼審查的 prompt"""
+    return f"""
+你是一位經驗豐富的前端工程師，專長於 Vue.js 與前端程式碼審查。請協助我審查以下 Pull Request 的程式碼差異（diff），並以繁體中文回覆審查建議。
+
+請**聚焦於本次 PR 的變更內容**，並依下列稽核面向給予具體建議。請條列清楚，必要時可附上簡短程式碼範例協助理解。
+
+---
+
+### 稽核重點：
+
+1. **邏輯正確性與潛在錯誤**
+   - 是否有邏輯錯誤、潛在 Bug 或未處理的邊界條件？
+   - 是否有不恰當的例外處理或錯誤忽略？
+   - 是否處理好非同步邏輯（如 API 呼叫、事件綁定等）？
+
+2. **可讀性與命名一致性**
+   - 變數、函式、元件命名是否一致、清晰且語意明確？
+
+3. **程式碼結構與重構潛力**
+   - 是否有重複、冗餘的邏輯？
+   - 是否有可抽取為 composable、元件或 utility 函式的機會？
+   - 元件是否過於肥大？是否可以拆分子元件？
+   - 流程是否簡潔、易於維護？
+
+4. **註解與文件**
+   - 是否有缺乏註解、難以理解的邏輯？
+   - 是否有必要補充文件或 TODO 提示？
+   - 是否有引入第三方函式庫但未說明用途？
+
+5. **最佳實踐與風格一致性**
+   - 是否符合常見設計原則（如 SRP、DRY、KISS 等）？
+   - 是否正確處理錯誤與資源釋放（如移除事件監聽器、取消請求）？
+   - 是否使用合適的 Vue 語法（如 `v-model`、`watchEffect`、`ref` 與 `reactive` 的正確使用）？
+   - 是否有過度使用 watch 或 computed？
+
+6. **前端分層設計（Component / Composable / Store / API 模組）**
+   - **元件是否專注於 UI 呈現與使用者互動，不包含複雜邏輯？**
+   - **composable 是否封裝了可重用的邏輯或狀態？**
+   - **API 模組是否集中處理請求，未分散於各元件中？**
+   - **Vuex 等狀態管理是否只處理應該共享的資料與行為？**
+   - 是否有跨層職責混淆（如元件內直接調整全域狀態或處理複雜商業邏輯）？
+   - 是否有機會重構以改善可測試性與模組化？
+
+---
+
+### 程式風格規範：
+
+1. **排版**
+   - 請確認縮排是否一致，1 個 tab 等於 4 個 spaces。
+   
+2. **命名規則**
+   - 變數／函式：使用駝峰式命名（camelCase）。
+   - 常數：使用大寫蛇式命名（UPPER_SNAKE_CASE）。
+   - 元件名稱：使用帕斯卡命名（PascalCase）。
+   - 資料欄位或 JSON key：使用小寫蛇式命名（lower_snake_case）。
+
+---
+
+請依上述面向進行審查，並僅針對此次程式碼差異提供具體建議與優化方向。
+以下是 PR 的 diff：
+
+{diff}
+"""
+
+# 收集 PR diff
+diff = collectPrDiff(pr)
+
+# 根據 repo 名稱決定使用哪個 prompt
+isFrontend = is_frontend_repo(repoName)
+print(f"🔍 檢測到專案類型: {'前端' if isFrontend else '後端'} (repo: {repoName})")
+
+if isFrontend:
+    prompt = get_frontend_prompt(diff)
+    reviewType = "前端"
+else:
+    prompt = get_backend_prompt(diff)
+    reviewType = "後端"
 
 # 模型價格常數 (每百萬 token 的美元價格)
 MODEL_PRICES = {
@@ -206,7 +294,7 @@ tokenUsage = {
 # 使用新函數發布留言到 PR
 create_issue_comment(
     pr=pr,
-    title="Hsuan AI Code Review 建議(claude-sonnet-4)",
+    title=f"Hsuan AI Code Review 建議({reviewType}, claude-sonnet-4)",
     content=aiFeedback,
     modelId=modelId,
     tokenUsage=tokenUsage
