@@ -2,13 +2,17 @@ name: Master Workflow
 
 on:
     workflow_call:
-    secrets:
-        token:
-            required: true
+        secrets:
+            token:
+                required: true
 
 jobs:
     call-push-wecom-on-label:
         uses: ./.github/workflows/push_wecom_on_label.yml
+        secrets:
+            token: ${{ secrets.token }}
 
     call-ai-code-review:
         uses: ./.github/workflows/ai_code_review.yml
+        secrets:
+            token: ${{ secrets.token }}
