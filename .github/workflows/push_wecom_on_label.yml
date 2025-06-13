@@ -1,0 +1,49 @@
+name: push wecom on label
+on:
+  pull_request:
+    types: [labeled, unlabeled]
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      AWAITING_REVIEW_LABEL: "awaiting review"
+      NEEDS_CHANGES_LABEL: "needs changes"
+    steps:
+      - name: Check for specific label
+        id: check_label
+        run: |
+          if [[ "${{ github.event.label.name }}" == "$AWAITING_REVIEW_LABEL" || "${{ github.event.label.name }}" == "$NEEDS_CHANGES_LABEL" ]]; then
+            echo "Label found: $AWAITING_REVIEW_LABEL or $NEEDS_CHANGES_LABEL"
+            echo "found=true" >> $GITHUB_ENV 
+            echo "label_name=${{ github.event.label.name }}" >> $GITHUB_ENV
+          else
+            echo "Label not found"
+            echo "found=false" >> $GITHUB_ENV
+          fi
+      - name: Send notification
+        if: env.found == 'true'
+        env:
+          WECHAT_URL: ${{ secrets.WECHAT_URL }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          ACTION_TYPE: ${{ github.event.action }}
+          LABEL_NAME: ${{ env.label_name }}
+        run: |
+          if [[ "$LABEL_NAME" = "awaiting review" && "$ACTION_TYPE" = "labeled" ]]; then
+              MESSAGE="PR 已發，請 hsuan 協助 code review！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
+          elif [[ "$LABEL_NAME" = "needs changes" && "$ACTION_TYPE" = "labeled" ]]; then
+              MESSAGE="PR 尚有問題請修正！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
+          elif [[ "$ACTION_TYPE" = "unlabeled" ]]; then
+              MESSAGE="PR 已取消 $LABEL_NAME 標記！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
+          fi
+
+          curl -X POST "$WECHAT_URL" \
+          -H 'Content-Type: application/json' \
+          -d '{
+            "msgtype": "text",
+            "text": {
+              "content": "'"$MESSAGE"'"
+            }
+          }'
