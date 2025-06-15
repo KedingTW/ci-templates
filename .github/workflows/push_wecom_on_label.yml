@@ -6,6 +6,8 @@ on:
     secrets:
       token:
         required: true
+      WECHAT_URL:
+        required: true
 jobs:
   notify:
     runs-on: ubuntu-latest

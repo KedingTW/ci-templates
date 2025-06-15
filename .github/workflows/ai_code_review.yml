@@ -7,6 +7,16 @@ on:
     secrets:
       token:
         required: true
+      AWS_REGION:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_BEDROCK_ACCESS_ROLE_ARN:
+        required: true
+      AWS_BEDROCK_EXTERNAL_ID:
+        required: true
 
 permissions:
   contents: read
