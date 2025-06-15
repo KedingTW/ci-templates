@@ -29,6 +29,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Checkout ci-templates
+        uses: actions/checkout@v3
+        with:
+          repository: KedingTW/ci-templates
+          path: ci-templates
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -61,6 +67,6 @@ jobs:
           echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> $GITHUB_ENV
 
       - name: Run AI Code Review
-        run: python .github/scripts/ai_code_review.py
+        run: python ci-templates/.github/scripts/ai_code_review.py
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
