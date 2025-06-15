@@ -5,12 +5,25 @@ on:
     secrets:
       token:
         required: true
+      WECHAT_URL:
+        required: true
+      AWS_REGION:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_BEDROCK_ACCESS_ROLE_ARN:
+        required: true
+      AWS_BEDROCK_EXTERNAL_ID:
+        required: true
 
 jobs:
   call-push-wecom-on-label:
     uses: ./.github/workflows/push_wecom_on_label.yml
     secrets:
       token: ${{ secrets.token }}
+      WECHAT_URL: ${{ secrets.WECHAT_URL }}
 
   call-ai-code-review:
     permissions:
@@ -19,3 +32,8 @@ jobs:
     uses: ./.github/workflows/ai_code_review.yml
     secrets:
       token: ${{ secrets.token }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_BEDROCK_ACCESS_ROLE_ARN: ${{ secrets.AWS_BEDROCK_ACCESS_ROLE_ARN }}
+      AWS_BEDROCK_EXTERNAL_ID: ${{ secrets.AWS_BEDROCK_EXTERNAL_ID }}

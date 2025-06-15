@@ -3,7 +3,7 @@ name: AI Code Review
 on:
   pull_request_target:
     types: [labeled]
-  workflow_call: # 👈 加上這行才能被 uses 呼叫
+  workflow_call:
     secrets:
       token:
         required: true
@@ -64,4 +64,4 @@ jobs:
       - name: Run AI Code Review
         run: python .github/scripts/ai_code_review.py
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.token }}
