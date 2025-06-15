@@ -25,7 +25,6 @@ permissions:
 jobs:
   ai-review:
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'ai code review'
 
     steps:
       - uses: actions/checkout@v3

@@ -26,6 +26,7 @@ jobs:
       WECHAT_URL: ${{ secrets.WECHAT_URL }}
 
   call-ai-code-review:
+    if: contains(github.event.pull_request.labels.*.name, 'ai code review')
     permissions:
       contents: read
       pull-requests: write
