@@ -226,37 +226,60 @@ def calculate_cost(modelId, inputTokens, outputTokens):
     }
 
 def create_issue_comment(pr, title, content, modelId=None, tokenUsage=None):
-    """發布留言到 PR，並顯示 token 使用量和費用"""
-    # 使用台灣時間（UTC+8）
+    """發布留言到 PR，支援長訊息自動分段，並顯示 token 使用量和費用"""
     taiwanTime = datetime.now(timezone(timedelta(hours=8)))
     timestamp = taiwanTime.strftime("%Y-%m-%d %H:%M:%S")
-    comment = f"🧠 **{title}**\n\n{content}\n\n"
-    
-    # 如果有提供 token 使用量資訊，則添加到留言中
+
+    usage_info = ""
     if tokenUsage and modelId:
         inputTokens = tokenUsage.get('inputTokens', 0)
         outputTokens = tokenUsage.get('outputTokens', 0)
         totalTokens = inputTokens + outputTokens
-        
+
         cost = calculate_cost(modelId, inputTokens, outputTokens)
-        
-        comment += f"---\n"
-        comment += f"📊 **使用資訊** ({timestamp})\n"
-        comment += f"- 模型: `{modelId}`\n"
-        comment += f"- 輸入 Tokens: {inputTokens:,}\n"
-        comment += f"- 輸出 Tokens: {outputTokens:,}\n"
-        comment += f"- 總計 Tokens: {totalTokens:,}\n"
-        
+
+        usage_info += "\n---\n"
+        usage_info += f"📊 **使用資訊** ({timestamp})\n"
+        usage_info += f"- 模型: `{modelId}`\n"
+        usage_info += f"- 輸入 Tokens: {inputTokens:,}\n"
+        usage_info += f"- 輸出 Tokens: {outputTokens:,}\n"
+        usage_info += f"- 總計 Tokens: {totalTokens:,}\n"
+
         if 'error' in cost:
-            comment += f"- 估計費用: 無法計算 ({cost['error']})\n"
+            usage_info += f"- 估計費用: 無法計算 ({cost['error']})\n"
         else:
-            comment += f"- 估計費用: ${cost['totalCost']:.6f} USD (輸入: ${cost['inputCost']:.6f}, 輸出: ${cost['outputCost']:.6f})\n"
-    
-    # 發布留言到 PR
-    pr.create_issue_comment(comment)
-    
-    # 同時在控制台輸出資訊
-    print("✅ 已成功送出 AI Code Review 回饋。")
+            usage_info += f"- 估計費用: ${cost['totalCost']:.6f} USD (輸入: ${cost['inputCost']:.6f}, 輸出: ${cost['outputCost']:.6f})\n"
+
+    # 組合完整留言內容
+    full_text = f"🧠 **{title}**\n\n{content.strip()}\n\n{usage_info}"
+
+    # 分段發送
+    def split_text(text, max_len=60000):
+        lines = text.split('\n')
+        chunks = []
+        current = ""
+
+        for line in lines:
+            if len(current) + len(line) + 1 < max_len:
+                current += line + '\n'
+            else:
+                chunks.append(current.strip())
+                current = line + '\n'
+
+        if current:
+            chunks.append(current.strip())
+        return chunks
+
+    segments = split_text(full_text)
+
+    for i, segment in enumerate(segments):
+        if i == 0:
+            pr.create_issue_comment(segment)
+        else:
+            pr.create_issue_comment(f"🧩 **續篇 Part {i+1}**\n\n{segment}")
+
+    # Console log
+    print(f"✅ 成功送出 {len(segments)} 則留言")
     if tokenUsage and modelId:
         print(f"📊 Token 使用量: 輸入={inputTokens:,}, 輸出={outputTokens:,}, 總計={totalTokens:,}")
         print(f"💰 估計費用: ${cost['totalCost']:.6f} USD")
@@ -278,7 +301,7 @@ response = bedrockRuntime.converse(
         }
     ],
     inferenceConfig={
-        "maxTokens": 800,
+        "maxTokens": 4000,
         "temperature": 0.7
     }
 )
