@@ -1,9 +1,5 @@
 name: Master Workflow
 
-permissions:
-  actions: read
-  contents: read
-
 on:
   workflow_call:
     secrets:
@@ -25,6 +21,9 @@ on:
 jobs:
   call-push-wecom-on-label:
     uses: ./.github/workflows/push_wecom_on_label.yml
+    permissions:
+      actions: read
+      contents: read
     secrets:
       token: ${{ secrets.token }}
       WECHAT_URL: ${{ secrets.WECHAT_URL }}
@@ -32,6 +31,8 @@ jobs:
   call-ai-code-review:
     if: contains(github.event.pull_request.labels.*.name, 'ai code review')
     permissions:
+      actions: read
+      contents: read
       pull-requests: write
     uses: ./.github/workflows/ai_code_review.yml
     secrets:
