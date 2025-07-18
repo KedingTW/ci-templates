@@ -20,6 +20,7 @@ on:
 
 jobs:
   call-push-wecom-on-label:
+    if: github.event_name == 'pull_request' && (github.event.action == 'labeled' || github.event.action == 'unlabeled')
     uses: ./.github/workflows/push_wecom_on_label.yml
     permissions:
       actions: read
