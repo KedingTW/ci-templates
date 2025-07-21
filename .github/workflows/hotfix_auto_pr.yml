@@ -1,0 +1,96 @@
+name: Hotfix Auto PR
+
+on:
+  pull_request:
+    types: [opened]
+    branches: [master, develop]
+
+jobs:
+  create-hotfix-pr:
+    runs-on: ubuntu-latest
+    if: endsWith(github.head_ref, '(hotfix)')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set target branch
+        id: set-target
+        run: |
+          if [ "${{ github.base_ref }}" == "master" ]; then
+            echo "target_branch=develop" >> $GITHUB_OUTPUT
+            echo "source_branch=master" >> $GITHUB_OUTPUT
+            echo "target_display=Develop" >> $GITHUB_OUTPUT
+            echo "source_display=master" >> $GITHUB_OUTPUT
+          else
+            echo "target_branch=master" >> $GITHUB_OUTPUT
+            echo "source_branch=develop" >> $GITHUB_OUTPUT
+            echo "target_display=Master" >> $GITHUB_OUTPUT
+            echo "source_display=develop" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if PR to target branch already exists
+        id: check-pr
+        run: |
+          # 檢查是否已經有相同的 hotfix branch 對目標分支的 PR
+          EXISTING_PR=$(gh pr list --base ${{ steps.set-target.outputs.target_branch }} --head ${{ github.head_ref }} --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "pr_exists=true" >> $GITHUB_OUTPUT
+            echo "existing_pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
+          else
+            echo "pr_exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create PR to target branch
+        if: steps.check-pr.outputs.pr_exists == 'false'
+        run: |
+          # 取得原始 PR 的標題並轉義特殊字元
+          ORIGINAL_TITLE=$(echo '${{ github.event.pull_request.title }}' | sed 's/"/\\"/g')
+
+          # 取得原始 PR 的內容並轉義特殊字元
+          ORIGINAL_BODY=$(echo '${{ github.event.pull_request.body }}' | sed 's/"/\\"/g')
+
+          # 建立新的 PR 到目標分支
+          gh pr create \
+            --base ${{ steps.set-target.outputs.target_branch }} \
+            --head '${{ github.head_ref }}' \
+            --title "$ORIGINAL_TITLE" \
+            --body "🔥 **Hotfix Auto-generated PR**
+
+          此 PR 是由 hotfix workflow 自動建立，當分支名稱以 (hotfix) 結尾的 PR 合併到 ${{ steps.set-target.outputs.source_branch }} 時，自動建立對應的 ${{ steps.set-target.outputs.target_branch }} PR。
+
+          **原始 PR (to ${{ steps.set-target.outputs.source_branch }}):** #${{ github.event.pull_request.number }}
+          **Hotfix Branch:** \`${{ github.head_ref }}\`
+
+          ---
+
+          $ORIGINAL_BODY"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add comment to original PR
+        if: steps.check-pr.outputs.pr_exists == 'false'
+        run: |
+          gh pr comment '${{ github.event.pull_request.number }}' --body "🔥 **Hotfix PR 已自動建立**
+
+          由於此分支名稱以 \`(hotfix)\` 結尾且 PR 目標為 ${{ steps.set-target.outputs.source_branch }} 分支，已自動建立對應的 PR 到 ${{ steps.set-target.outputs.target_branch }} 分支。
+
+          ✅ **自動建立的 ${{ steps.set-target.outputs.target_display }} PR:** 請查看 [Pull Requests](https://github.com/${{ github.repository }}/pulls?q=is%3Apr+is%3Aopen+head%3A${{ github.head_ref }}+base%3A${{ steps.set-target.outputs.target_branch }}) 頁面"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment if PR already exists
+        if: steps.check-pr.outputs.pr_exists == 'true'
+        run: |
+          gh pr comment '${{ github.event.pull_request.number }}' --body "ℹ️ **Hotfix PR 已存在**
+
+          此 (hotfix) 分支已經有對應的 PR 到 ${{ steps.set-target.outputs.target_branch }} 分支。
+
+          📋 **現有的 ${{ steps.set-target.outputs.target_display }} PR:** #${{ steps.check-pr.outputs.existing_pr_number }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
