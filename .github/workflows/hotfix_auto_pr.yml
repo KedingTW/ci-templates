@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     if: endsWith(github.head_ref, '(hotfix)')
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
 
     steps:
@@ -20,9 +20,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-
-      - name: Install GitHub CLI
-        uses: cli/cli-action@v2
 
       - name: Set target branch
         id: set-target
