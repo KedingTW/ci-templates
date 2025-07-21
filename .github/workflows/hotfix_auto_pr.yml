@@ -5,6 +5,9 @@ on:
     types: [opened, reopened]
     branches: [master, develop]
   workflow_call:
+    secrets:
+      token:
+        required: true
 
 jobs:
   create-hotfix-pr:
@@ -18,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.token }}
           fetch-depth: 0
 
       - name: Set target branch
@@ -48,7 +51,7 @@ jobs:
             echo "pr_exists=false" >> $GITHUB_OUTPUT
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.token }}
 
       - name: Create PR to target branch
         if: steps.check-pr.outputs.pr_exists == 'false'
@@ -75,7 +78,7 @@ jobs:
 
           $ORIGINAL_BODY"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.token }}
 
       - name: Add comment to original PR
         if: steps.check-pr.outputs.pr_exists == 'false'
@@ -86,7 +89,7 @@ jobs:
 
           ✅ **自動建立的 ${{ steps.set-target.outputs.target_display }} PR:** 請查看 [Pull Requests](https://github.com/${{ github.repository }}/pulls?q=is%3Apr+is%3Aopen+head%3A${{ github.head_ref }}+base%3A${{ steps.set-target.outputs.target_branch }}) 頁面"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.token }}
 
       - name: Comment if PR already exists
         if: steps.check-pr.outputs.pr_exists == 'true'
