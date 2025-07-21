@@ -43,3 +43,9 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_BEDROCK_ACCESS_ROLE_ARN: ${{ secrets.AWS_BEDROCK_ACCESS_ROLE_ARN }}
       AWS_BEDROCK_EXTERNAL_ID: ${{ secrets.AWS_BEDROCK_EXTERNAL_ID }}
+
+  call-hotfix-auto-pr:
+    if: endsWith(github.head_ref, '(hotfix)')
+    uses: ./.github/workflows/hotfix_auto_pr.yml
+    secrets:
+      token: ${{ secrets.token }}
