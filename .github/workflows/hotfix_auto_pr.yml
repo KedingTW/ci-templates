@@ -2,7 +2,7 @@ name: Hotfix Auto PR
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, reopened]
     branches: [master, develop]
   workflow_call:
 
