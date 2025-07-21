@@ -37,7 +37,7 @@ jobs:
         id: check-pr
         run: |
           # 檢查是否已經有相同的 hotfix branch 對目標分支的 PR
-          EXISTING_PR=$(gh pr list --base ${{ steps.set-target.outputs.target_branch }} --head ${{ github.head_ref }} --json number --jq '.[0].number // empty')
+          EXISTING_PR=$(gh pr list --base "${{ steps.set-target.outputs.target_branch }}" --head "${{ github.head_ref }}" --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING_PR" ]; then
             echo "pr_exists=true" >> $GITHUB_OUTPUT
             echo "existing_pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
