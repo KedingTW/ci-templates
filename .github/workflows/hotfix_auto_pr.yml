@@ -4,6 +4,7 @@ on:
   pull_request:
     types: [opened]
     branches: [master, develop]
+  workflow_call:
 
 jobs:
   create-hotfix-pr:

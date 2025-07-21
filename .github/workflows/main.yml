@@ -47,5 +47,3 @@ jobs:
   call-hotfix-auto-pr:
     if: endsWith(github.head_ref, '(hotfix)')
     uses: ./.github/workflows/hotfix_auto_pr.yml
-    secrets:
-      token: ${{ secrets.token }}
