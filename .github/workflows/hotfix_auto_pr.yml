@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     if: endsWith(github.head_ref, '(hotfix)')
     permissions:
+      actions: read
       contents: read
       pull-requests: write
 

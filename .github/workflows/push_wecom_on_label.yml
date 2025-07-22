@@ -10,6 +10,11 @@ on:
       WECHAT_URL:
         required: true
 
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
 jobs:
   notify:
     runs-on: ubuntu-latest
