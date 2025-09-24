@@ -41,6 +41,71 @@ def collectPrDiff(pr):
             diff += f"\n\n### {file.filename}\n{file.patch}"
     return diff
 
+def splitPrIntoChunks(pr, max_chunk_size=60000):
+    """將 PR 分割成多個可處理的區塊，確保每個檔案都被完整審查"""
+    all_files = list(pr.get_files())
+    files_with_patches = [f for f in all_files if f.patch]
+    
+    if not files_with_patches:
+        return []
+    
+    chunks = []
+    current_chunk_files = []
+    current_chunk_size = 0
+    
+    # 基礎 prompt 大小估算
+    base_prompt_size = 3000
+    
+    for file in files_with_patches:
+        file_diff = f"\n\n### {file.filename}\n{file.patch}"
+        file_size = len(file_diff)
+        
+        # 如果單個檔案就超過限制，單獨處理
+        if file_size + base_prompt_size > max_chunk_size:
+            # 先處理當前累積的檔案
+            if current_chunk_files:
+                chunks.append(current_chunk_files)
+                current_chunk_files = []
+                current_chunk_size = 0
+            
+            # 單獨處理大檔案
+            chunks.append([file])
+            print(f"⚠️ 大檔案單獨處理: {file.filename} ({file_size:,} 字符)")
+            continue
+        
+        # 檢查加入此檔案是否會超過限制
+        if current_chunk_size + file_size + base_prompt_size > max_chunk_size:
+            # 當前區塊已滿，開始新區塊
+            if current_chunk_files:
+                chunks.append(current_chunk_files)
+            current_chunk_files = [file]
+            current_chunk_size = file_size
+        else:
+            # 加入當前區塊
+            current_chunk_files.append(file)
+            current_chunk_size += file_size
+    
+    # 處理最後一個區塊
+    if current_chunk_files:
+        chunks.append(current_chunk_files)
+    
+    print(f"📊 將 {len(files_with_patches)} 個檔案分成 {len(chunks)} 個區塊進行審查")
+    for i, chunk in enumerate(chunks):
+        chunk_size = sum(len(f"\n\n### {f.filename}\n{f.patch}") for f in chunk)
+        file_names = [f.filename for f in chunk]
+        print(f"  區塊 {i+1}: {len(chunk)} 個檔案 ({chunk_size:,} 字符)")
+        print(f"    檔案: {', '.join(file_names[:3])}{'...' if len(file_names) > 3 else ''}")
+    
+    return chunks
+
+def buildChunkDiff(chunk_files):
+    """為特定檔案區塊建構 diff"""
+    diff = ""
+    for file in chunk_files:
+        if file.patch:
+            diff += f"\n\n### {file.filename}\n{file.patch}"
+    return diff
+
 def is_frontend_repo(repo_name):
     """判斷是否為前端專案"""
     # 根據 repo 名稱判斷是否為前端專案
@@ -58,8 +123,6 @@ def get_backend_prompt(diff):
 你是一位經驗豐富的軟體工程師，專長於程式碼審查。請協助我審查以下 Pull Request 的程式碼差異（diff），並以繁體中文回覆審查建議。
 
 請**聚焦於本次 PR 的變更內容**，並依下列稽核面向給予具體建議。請條列清楚，必要時可附上簡短程式碼範例協助理解。
-
-依照此次使用模型的特性，請避免產生過長回覆，若回覆超過 GitHub 留言限制，請自行分段發布續篇留言。
 
 ---
 
@@ -180,19 +243,30 @@ def get_frontend_prompt(diff):
 {diff}
 """
 
-# 收集 PR diff
-diff = collectPrDiff(pr)
-
-# 根據 repo 名稱決定使用哪個 prompt
+# 檢測專案類型
 isFrontend = is_frontend_repo(repoName)
 print(f"🔍 檢測到專案類型: {'前端' if isFrontend else '後端'} (repo: {repoName})")
 
-if isFrontend:
-    prompt = get_frontend_prompt(diff)
-    reviewType = "前端"
+# 將 PR 分割成可處理的區塊
+chunks = splitPrIntoChunks(pr)
+
+if not chunks:
+    print("❌ 沒有找到需要審查的程式碼差異")
+    exit(0)
+
+# 如果只有一個區塊，使用原有邏輯
+if len(chunks) == 1:
+    print("📝 單一區塊審查模式")
+    diff = buildChunkDiff(chunks[0])
+    if isFrontend:
+        prompt = get_frontend_prompt(diff)
+        reviewType = "前端"
+    else:
+        prompt = get_backend_prompt(diff)
+        reviewType = "後端"
 else:
-    prompt = get_backend_prompt(diff)
-    reviewType = "後端"
+    print(f"📝 多區塊審查模式 ({len(chunks)} 個區塊)")
+    reviewType = "前端" if isFrontend else "後端"
 
 # 模型價格常數 (每百萬 token 的美元價格)
 MODEL_PRICES = {
@@ -288,39 +362,145 @@ def create_issue_comment(pr, title, content, modelId=None, tokenUsage=None):
 
 # 選項 1: 使用 converse 方法 (僅支持 Claude 和部分 Amazon 模型)
 modelId = 'us.anthropic.claude-sonnet-4-20250514-v1:0'
-# modelId = 'amazon.nova-pro-v1:0'
 
-response = bedrockRuntime.converse(
-    modelId=modelId,
-    messages=[
-        {
-            "role": "user",
-            "content": [
+def processChunk(chunk_files, chunk_index, total_chunks):
+    """處理單個區塊的審查"""
+    chunk_diff = buildChunkDiff(chunk_files)
+    chunk_prompt = get_backend_prompt(chunk_diff) if not isFrontend else get_frontend_prompt(chunk_diff)
+    
+    try:
+        response = bedrockRuntime.converse(
+            modelId=modelId,
+            messages=[
                 {
-                    "text": prompt
+                    "role": "user",
+                    "content": [
+                        {
+                            "text": chunk_prompt
+                        }
+                    ]
                 }
-            ]
+            ],
+            inferenceConfig={
+                "maxTokens": 4000,
+                "temperature": 0.7
+            }
+        )
+        
+        aiFeedback = response['output']['message']['content'][0]['text']
+        
+        # 獲取 token 使用量
+        tokenUsage = {
+            'inputTokens': response.get('usage', {}).get('inputTokens', 0),
+            'outputTokens': response.get('usage', {}).get('outputTokens', 0)
         }
-    ],
-    inferenceConfig={
-        "maxTokens": 4000,
-        "temperature": 0.7
-    }
-)
+        
+        # 建構檔案清單
+        file_names = [f.filename for f in chunk_files]
+        file_list = ', '.join(file_names[:3])
+        if len(file_names) > 3:
+            file_list += f' 等 {len(file_names)} 個檔案'
+        
+        # 發布審查結果
+        if total_chunks == 1:
+            title = f"Hsuan AI Code Review 建議({reviewType}, claude-sonnet-4)"
+        else:
+            title = f"Hsuan AI Code Review 建議 - 第 {chunk_index + 1} 部分 ({file_list})"
+        
+        create_issue_comment(
+            pr=pr,
+            title=title,
+            content=aiFeedback,
+            modelId=modelId,
+            tokenUsage=tokenUsage
+        )
+        
+        return True, tokenUsage
+        
+    except Exception as e:
+        if "Input is too long" in str(e):
+            print(f"⚠️ 區塊 {chunk_index + 1} 輸入過長，嘗試進一步分割...")
+            # 如果區塊仍然太大，嘗試進一步分割
+            if len(chunk_files) > 1:
+                # 將區塊分成兩半
+                mid = len(chunk_files) // 2
+                first_half = chunk_files[:mid]
+                second_half = chunk_files[mid:]
+                
+                print(f"  分割成兩個子區塊: {len(first_half)} + {len(second_half)} 個檔案")
+                
+                # 遞迴處理兩個子區塊
+                success1, usage1 = processChunk(first_half, chunk_index, total_chunks * 2)
+                success2, usage2 = processChunk(second_half, chunk_index, total_chunks * 2)
+                
+                # 合併 token 使用量
+                combined_usage = {
+                    'inputTokens': usage1.get('inputTokens', 0) + usage2.get('inputTokens', 0),
+                    'outputTokens': usage1.get('outputTokens', 0) + usage2.get('outputTokens', 0)
+                }
+                
+                return success1 and success2, combined_usage
+            else:
+                # 單個檔案仍然太大，發送錯誤報告
+                file_name = chunk_files[0].filename
+                error_message = f"""## ⚠️ 檔案過大無法審查
 
-aiFeedback = response['output']['message']['content'][0]['text']
+**檔案**: `{file_name}`
 
-# 獲取 token 使用量
-tokenUsage = {
-    'inputTokens': response.get('usage', {}).get('inputTokens', 0),
-    'outputTokens': response.get('usage', {}).get('outputTokens', 0)
-}
+**問題**: 此檔案的程式碼差異過大，超過 Claude Sonnet 4 模型的輸入限制
 
-# 使用新函數發布留言到 PR
-create_issue_comment(
-    pr=pr,
-    title=f"Hsuan AI Code Review 建議({reviewType}, claude-sonnet-4)",
-    content=aiFeedback,
-    modelId=modelId,
-    tokenUsage=tokenUsage
-)
+**建議**:
+1. 將大型檔案的修改拆分成多個較小的提交
+2. 檢查是否包含大量自動生成的程式碼
+3. 考慮手動審查此檔案的關鍵變更
+
+**技術詳情**:
+- 檔案大小: {len(chunk_files[0].patch):,} 字符
+- 時間: {datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")}
+"""
+                pr.create_issue_comment(error_message)
+                return False, {'inputTokens': 0, 'outputTokens': 0}
+        else:
+            print(f"❌ 區塊 {chunk_index + 1} 處理失敗: {str(e)}")
+            raise e
+
+# 處理所有區塊
+total_usage = {'inputTokens': 0, 'outputTokens': 0}
+successful_chunks = 0
+
+if len(chunks) == 1:
+    # 單一區塊模式
+    success, usage = processChunk(chunks[0], 0, 1)
+    if success:
+        successful_chunks = 1
+        total_usage = usage
+else:
+    # 多區塊模式
+    for i, chunk in enumerate(chunks):
+        print(f"🔄 處理區塊 {i + 1}/{len(chunks)}...")
+        success, usage = processChunk(chunk, i, len(chunks))
+        
+        if success:
+            successful_chunks += 1
+            total_usage['inputTokens'] += usage.get('inputTokens', 0)
+            total_usage['outputTokens'] += usage.get('outputTokens', 0)
+    
+    # 發送總結留言
+    if successful_chunks > 1:
+        summary_message = f"""## 📋 AI Code Review 總結
+
+✅ **審查完成**: 成功審查了 {successful_chunks}/{len(chunks)} 個區塊
+
+📊 **總計使用量**:
+- 輸入 Tokens: {total_usage['inputTokens']:,}
+- 輸出 Tokens: {total_usage['outputTokens']:,}
+- 總計 Tokens: {total_usage['inputTokens'] + total_usage['outputTokens']:,}
+
+💡 **說明**: 由於 PR 包含大量程式碼變更，已分批進行審查以確保每個檔案都能被完整分析。
+
+⏰ **時間**: {datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")}
+"""
+        pr.create_issue_comment(summary_message)
+
+print(f"🎉 審查完成！成功處理 {successful_chunks} 個區塊")
+print(f"📊 總計 Token 使用量: 輸入={total_usage['inputTokens']:,}, 輸出={total_usage['outputTokens']:,}")
