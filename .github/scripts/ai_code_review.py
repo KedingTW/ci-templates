@@ -111,7 +111,7 @@ def is_frontend_repo(repo_name):
     # 根據 repo 名稱判斷是否為前端專案
     frontend_keywords = [
         'frontend', 'front-end', 'web', 'ui', 'vue', 'react', 
-        'angular', 'nuxt', 'next', 'client', 'app', 'portal'
+        'angular', 'nuxt', 'next', 'client', 'app', 'portal','ai-chatbox'
     ]
     
     repo_name_lower = repo_name.lower()
