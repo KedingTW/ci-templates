@@ -26,7 +26,7 @@ jobs:
             - name: Check for specific label
               id: check_label
               run: |
-                  if [[ "${{ github.event.label.name }}" == "$AWAITING_REVIEW_LABEL" || "${{ github.event.label.name }}" == "$NEEDS_CHANGES_LABEL" || "${{ github.event.label.name }}" == "$QUALITY_ISSUE_LABEL"]]; then
+                  if [[ "${{ github.event.label.name }}" == "$AWAITING_REVIEW_LABEL" ]] || [[ "${{ github.event.label.name }}" == "$NEEDS_CHANGES_LABEL" ]] || [[ "${{ github.event.label.name }}" == "$QUALITY_ISSUE_LABEL" ]]; then
                     echo "Label found: $AWAITING_REVIEW_LABEL or $NEEDS_CHANGES_LABEL or QUALITY_ISSUE_LABEL"
                     echo "found=true" >> $GITHUB_ENV 
                     echo "label_name=${{ github.event.label.name }}" >> $GITHUB_ENV
