@@ -1,98 +1,101 @@
 name: push wecom on label
 
 on:
-  pull_request:
-    types: [labeled, unlabeled]
-  workflow_call:
-    secrets:
-      token:
-        required: true
-      WECHAT_URL:
-        required: true
+    pull_request:
+        types: [labeled, unlabeled]
+    workflow_call:
+        secrets:
+            token:
+                required: true
+            WECHAT_URL:
+                required: true
 
 permissions:
-  actions: read
-  contents: read
-  pull-requests: write
+    actions: read
+    contents: read
+    pull-requests: write
 
 jobs:
-  notify:
-    runs-on: ubuntu-latest
-    env:
-      AWAITING_REVIEW_LABEL: "awaiting review"
-      NEEDS_CHANGES_LABEL: "needs changes"
-    steps:
-      - name: Check for specific label
-        id: check_label
-        run: |
-          if [[ "${{ github.event.label.name }}" == "$AWAITING_REVIEW_LABEL" || "${{ github.event.label.name }}" == "$NEEDS_CHANGES_LABEL" ]]; then
-            echo "Label found: $AWAITING_REVIEW_LABEL or $NEEDS_CHANGES_LABEL"
-            echo "found=true" >> $GITHUB_ENV 
-            echo "label_name=${{ github.event.label.name }}" >> $GITHUB_ENV
-          else
-            echo "Label not found"
-            echo "found=false" >> $GITHUB_ENV
-          fi
-
-      - name: Send notification with retry
-        if: env.found == 'true'
-        id: send_notification
-        continue-on-error: true
+    notify:
+        runs-on: ubuntu-latest
         env:
-          WECHAT_URL: ${{ secrets.WECHAT_URL }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-          ACTION_TYPE: ${{ github.event.action }}
-          LABEL_NAME: ${{ env.label_name }}
-        run: |
-          if [[ -z "$WECHAT_URL" ]]; then
-            echo "Warning: WECHAT_URL is not set. Skipping WeChat notification."
-            echo "notification_success=false" >> $GITHUB_ENV
-            exit 0
-          fi
+            AWAITING_REVIEW_LABEL: "awaiting review"
+            NEEDS_CHANGES_LABEL: "needs changes"
+            QUALITY_ISSUE_LABEL: "quality issue"
+        steps:
+            - name: Check for specific label
+              id: check_label
+              run: |
+                  if [[ "${{ github.event.label.name }}" == "$AWAITING_REVIEW_LABEL" || "${{ github.event.label.name }}" == "$NEEDS_CHANGES_LABEL" || "${{ github.event.label.name }}" == "$QUALITY_ISSUE_LABEL"]]; then
+                    echo "Label found: $AWAITING_REVIEW_LABEL or $NEEDS_CHANGES_LABEL or QUALITY_ISSUE_LABEL"
+                    echo "found=true" >> $GITHUB_ENV 
+                    echo "label_name=${{ github.event.label.name }}" >> $GITHUB_ENV
+                  else
+                    echo "Label not found"
+                    echo "found=false" >> $GITHUB_ENV
+                  fi
 
-          if [[ "$LABEL_NAME" = "awaiting review" && "$ACTION_TYPE" = "labeled" ]]; then
-            MESSAGE="PR 已發，請 hsuan 協助 code review！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
-          elif [[ "$LABEL_NAME" = "needs changes" && "$ACTION_TYPE" = "labeled" ]]; then
-            MESSAGE="PR 尚有問題請修正！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
-          elif [[ "$ACTION_TYPE" = "unlabeled" ]]; then
-            MESSAGE="PR 已取消 $LABEL_NAME 標記！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
-          fi
+            - name: Send notification with retry
+              if: env.found == 'true'
+              id: send_notification
+              continue-on-error: true
+              env:
+                  WECHAT_URL: ${{ secrets.WECHAT_URL }}
+                  PR_URL: ${{ github.event.pull_request.html_url }}
+                  PR_TITLE: ${{ github.event.pull_request.title }}
+                  PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+                  PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+                  ACTION_TYPE: ${{ github.event.action }}
+                  LABEL_NAME: ${{ env.label_name }}
+              run: |
+                  if [[ -z "$WECHAT_URL" ]]; then
+                    echo "Warning: WECHAT_URL is not set. Skipping WeChat notification."
+                    echo "notification_success=false" >> $GITHUB_ENV
+                    exit 0
+                  fi
 
-          echo "嘗試發送企業微信通知..."
+                  if [[ "$LABEL_NAME" = "awaiting review" && "$ACTION_TYPE" = "labeled" ]]; then
+                    MESSAGE="PR 已發，請 hsuan 協助 code review！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
+                  elif [[ "$LABEL_NAME" = "needs changes" && "$ACTION_TYPE" = "labeled" ]]; then
+                    MESSAGE="PR 尚有問題請修正！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
+                  elif [[ "$LABEL_NAME" = "quality issue" && "$ACTION_TYPE" = "labeled" ]]; then
+                    MESSAGE="此 PR 中仍有可於提交前檢查避免的項目，請協助確認並修正後再更新。\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
+                  elif [[ "$ACTION_TYPE" = "unlabeled" ]]; then
+                    MESSAGE="PR 已取消 $LABEL_NAME 標記！\n標題: $PR_TITLE\n作者: $PR_AUTHOR\n分支: $PR_BRANCH\nURL: $PR_URL"
+                  fi
 
-          if curl -X POST "$WECHAT_URL" \
-            --connect-timeout 30 \
-            --max-time 60 \
-            --retry 3 \
-            --retry-delay 5 \
-            -H 'Content-Type: application/json' \
-            -d '{
-              "msgtype": "text",
-              "text": {
-                "content": "'"$MESSAGE"'"
-              }
-            }'; then
-            echo "企業微信通知發送成功！"
-            echo "notification_success=true" >> $GITHUB_ENV
-          else
-            echo "企業微信通知發送失敗"
-            echo "notification_success=false" >> $GITHUB_ENV
-            exit 1
-          fi
-          
-      - name: Comment on PR if notification failed
-        if: env.found == 'true' && env.notification_success == 'false'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '⚠️ **企業微信通知發送失敗，請主動告知珈瑄**\n\n' +
-                    '由於網路連線問題，無法自動發送企業微信通知。\n' +
-                    '請手動通知相關人員檢查此 PR 的狀態變更。'
-            })
+                  echo "嘗試發送企業微信通知..."
+
+                  if curl -X POST "$WECHAT_URL" \
+                    --connect-timeout 30 \
+                    --max-time 60 \
+                    --retry 3 \
+                    --retry-delay 5 \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                      "msgtype": "text",
+                      "text": {
+                        "content": "'"$MESSAGE"'"
+                      }
+                    }'; then
+                    echo "企業微信通知發送成功！"
+                    echo "notification_success=true" >> $GITHUB_ENV
+                  else
+                    echo "企業微信通知發送失敗"
+                    echo "notification_success=false" >> $GITHUB_ENV
+                    exit 1
+                  fi
+
+            - name: Comment on PR if notification failed
+              if: env.found == 'true' && env.notification_success == 'false'
+              uses: actions/github-script@v6
+              with:
+                  script: |
+                      github.rest.issues.createComment({
+                        issue_number: context.issue.number,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: '⚠️ **企業微信通知發送失敗，請主動告知珈瑄**\n\n' +
+                              '由於網路連線問題，無法自動發送企業微信通知。\n' +
+                              '請手動通知相關人員檢查此 PR 的狀態變更。'
+                      })
