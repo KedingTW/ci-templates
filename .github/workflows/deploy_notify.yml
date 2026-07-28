@@ -1,0 +1,150 @@
+# ============================================
+# 部署通知 Reusable Workflow
+# ============================================
+# 用途：CD 部署後發送企業微信通知（成功/失敗）
+# 呼叫方式：各 repo 的 auto-deploy.yml 在 deploy job 完成後呼叫此 workflow
+#
+# Branch 命名規則：{交辦人}_{開發者}_{日期}_{功能描述}({類型})
+# 範例：hsuan_larry_20260717_fix_deploy_security(hotfix)
+#
+# @ 規則：
+#   成功通知 → 根據 PR title（或 branch name）第一個 _ 前的名字 @ 交辦人
+#   失敗通知 → 固定 @11020550（吳珈瑄）
+#
+# @ 對應表：
+#   hsuan  → 11020550（吳珈瑄）
+#   darren → 11110577（楊詠仁）
+#   sherry → 11020955（林潔庭）
+# ============================================
+
+name: Deploy Notification
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        description: "專案名稱，用於通知標題（如 ai-agent-api、mcp-server）"
+        required: true
+        type: string
+      deploy_result:
+        description: "部署結果：success / failure"
+        required: true
+        type: string
+      deploy_error:
+        description: "失敗原因（deploy_result=failure 時使用）"
+        required: false
+        type: string
+        default: "未知錯誤（腳本異常中斷）"
+      pr_title:
+        description: "PR title 或 branch name（用於顯示和判斷 @ 對象）"
+        required: false
+        type: string
+        default: ""
+      env_prefix:
+        description: "環境標籤：www / beta"
+        required: true
+        type: string
+      env_label:
+        description: "環境中文名：正式機 / 測試機"
+        required: true
+        type: string
+      branch_name:
+        description: "部署分支名稱（失敗通知用）"
+        required: true
+        type: string
+      has_seeder:
+        description: "是否顯示 Seeder 相關通知"
+        required: false
+        type: boolean
+        default: false
+      migrations_ran:
+        description: "已執行的 Migration（非空表示有執行）"
+        required: false
+        type: string
+        default: ""
+      seeders_ran:
+        description: "已執行的 Seeder（非空表示有執行）"
+        required: false
+        type: string
+        default: ""
+      migration_failed:
+        description: "Migration 是否失敗"
+        required: false
+        type: string
+        default: "false"
+      seeder_failed:
+        description: "Seeder 是否失敗"
+        required: false
+        type: string
+        default: "false"
+    secrets:
+      WECHAT_URL:
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send deploy notification
+        run: |
+          # === 構建通知內容 ===
+          if [ "${{ inputs.deploy_result }}" = "success" ]; then
+            # --- 成功通知 ---
+            pr_title="${{ inputs.pr_title }}"
+
+            if [ -n "$pr_title" ]; then
+              content="✅ [${{ inputs.project_name }}] ${{ inputs.env_prefix }}\n${pr_title}"
+
+              # 提取交辦人（第一個 _ 前的名字）決定 @ 對象
+              assignor=$(echo "$pr_title" | cut -d'_' -f1 | tr '[:upper:]' '[:lower:]')
+              mention=""
+              case "$assignor" in
+                hsuan) mention="<@11020550>" ;;
+                darren) mention="<@11110577>" ;;
+                sherry) mention="<@11020955>" ;;
+              esac
+
+              if [ -n "$mention" ]; then
+                content="${content}\n\n${mention}"
+              fi
+            else
+              content="✅ [${{ inputs.project_name }}] ${{ inputs.env_prefix }}\n代碼已更新"
+            fi
+
+            # 加入 Migration/Seeder 執行資訊
+            extra_info=""
+            if [ -n "${{ inputs.migrations_ran }}" ]; then
+              extra_info="${extra_info}\n📦 已執行 Migration"
+            fi
+            if [ "${{ inputs.has_seeder }}" = "true" ] && [ -n "${{ inputs.seeders_ran }}" ]; then
+              extra_info="${extra_info}\n🌱 已執行 Seeder"
+            fi
+            if [ "${{ inputs.migration_failed }}" = "true" ]; then
+              extra_info="${extra_info}\n⚠️ Migration 部分失敗，請手動檢查"
+            fi
+            if [ "${{ inputs.has_seeder }}" = "true" ] && [ "${{ inputs.seeder_failed }}" = "true" ]; then
+              extra_info="${extra_info}\n⚠️ Seeder 部分失敗，請手動檢查"
+            fi
+
+            if [ -n "$extra_info" ]; then
+              content="${content}\n${extra_info}"
+            fi
+          else
+            # --- 失敗通知（固定 @11020550） ---
+            content="❌ [${{ inputs.project_name }}] ${{ inputs.env_prefix }} 部署失敗\n\n環境: ${{ inputs.env_label }}\n分支: ${{ inputs.branch_name }}\n原因: ${{ inputs.deploy_error }}\n\n<@11020550>"
+          fi
+
+          # === 發送企業微信通知 ===
+          json_content=$(printf '%s' "$content" | sed 's/"/\\"/g')
+          response=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.WECHAT_URL }}" \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"${json_content}\"}}")
+
+          http_code=$(echo "$response" | tail -n1)
+
+          if [ "$http_code" = "200" ]; then
+            echo "✅ 企業微信通知發送成功"
+          else
+            echo "⚠️ 企業微信通知發送失敗 (HTTP $http_code)"
+            echo "Response: $(echo "$response" | head -n1)"
+          fi
