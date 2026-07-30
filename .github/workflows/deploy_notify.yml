@@ -15,6 +15,23 @@
 #   hsuan  → 11020550（吳珈瑄）
 #   darren → 11110577（楊詠仁）
 #   sherry → 11020955（林潔庭）
+#
+# 成功通知格式：
+#   ✅ [{project_name}] {env}
+#   分支：{pr_title}
+#   URL：https://github.com/KedingTW/{repo_name}/pull/{pr_number}
+#
+#   @{交辦人}
+#
+# 失敗通知格式：
+#   ❌ [{project_name}] {env} 部署失敗
+#
+#   環境: {env_label}
+#   分支: {branch_name}
+#   原因: {deploy_error}
+#   URL：https://github.com/KedingTW/{repo_name}/pull/{pr_number}
+#
+#   @吳珈瑄
 # ============================================
 
 name: Deploy Notification
@@ -24,6 +41,10 @@ on:
     inputs:
       project_name:
         description: "專案名稱，用於通知標題（如 ai-agent-api、mcp-server）"
+        required: true
+        type: string
+      repo_name:
+        description: "GitHub repo 名稱（用於組 PR URL，如 ai-agent-api）"
         required: true
         type: string
       deploy_result:
@@ -40,6 +61,11 @@ on:
         required: false
         type: string
         default: ""
+      pr_number:
+        description: "PR 編號（用於組 PR URL）"
+        required: false
+        type: string
+        default: ""
       env_prefix:
         description: "環境標籤：www / beta"
         required: true
@@ -49,7 +75,7 @@ on:
         required: true
         type: string
       branch_name:
-        description: "部署分支名稱（失敗通知用）"
+        description: "部署分支名稱"
         required: true
         type: string
       has_seeder:
@@ -87,13 +113,24 @@ jobs:
     steps:
       - name: Send deploy notification
         run: |
+          # === 組 PR URL ===
+          pr_url=""
+          if [ -n "${{ inputs.pr_number }}" ]; then
+            pr_url="https://github.com/KedingTW/${{ inputs.repo_name }}/pull/${{ inputs.pr_number }}"
+          fi
+
           # === 構建通知內容 ===
           if [ "${{ inputs.deploy_result }}" = "success" ]; then
             # --- 成功通知 ---
             pr_title="${{ inputs.pr_title }}"
 
             if [ -n "$pr_title" ]; then
-              content="✅ [${{ inputs.project_name }}] ${{ inputs.env_prefix }}\n${pr_title}"
+              content="✅ [${{ inputs.project_name }}] ${{ inputs.env_prefix }}\n分支：${pr_title}"
+
+              # 加上 PR URL
+              if [ -n "$pr_url" ]; then
+                content="${content}\nURL：${pr_url}"
+              fi
 
               # 提取交辦人（第一個 _ 前的名字）決定 @ 對象
               assignor=$(echo "$pr_title" | cut -d'_' -f1 | tr '[:upper:]' '[:lower:]')
@@ -131,7 +168,14 @@ jobs:
             fi
           else
             # --- 失敗通知（固定 @11020550） ---
-            content="❌ [${{ inputs.project_name }}] ${{ inputs.env_prefix }} 部署失敗\n\n環境: ${{ inputs.env_label }}\n分支: ${{ inputs.branch_name }}\n原因: ${{ inputs.deploy_error }}\n\n<@11020550>"
+            content="❌ [${{ inputs.project_name }}] ${{ inputs.env_prefix }} 部署失敗\n\n環境: ${{ inputs.env_label }}\n分支: ${{ inputs.branch_name }}\n原因: ${{ inputs.deploy_error }}"
+
+            # 加上 PR URL
+            if [ -n "$pr_url" ]; then
+              content="${content}\nURL：${pr_url}"
+            fi
+
+            content="${content}\n\n<@11020550>"
           fi
 
           # === 發送企業微信通知 ===
