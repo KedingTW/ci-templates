@@ -19,7 +19,7 @@
 # 成功通知格式：
 #   ✅ [{project_name}] {env}
 #   分支：{pr_title}
-#   URL：https://github.com/KedingTW/{repo_name}/pull/{pr_number}
+#   URL：https://github.com/KedingTW/{project_name}/pull/{pr_number}
 #
 #   @{交辦人}
 #
@@ -29,7 +29,7 @@
 #   環境: {env_label}
 #   分支: {branch_name}
 #   原因: {deploy_error}
-#   URL：https://github.com/KedingTW/{repo_name}/pull/{pr_number}
+#   URL：https://github.com/KedingTW/{project_name}/pull/{pr_number}
 #
 #   @吳珈瑄
 # ============================================
@@ -40,11 +40,7 @@ on:
   workflow_call:
     inputs:
       project_name:
-        description: "專案名稱，用於通知標題（如 ai-agent-api、mcp-server）"
-        required: true
-        type: string
-      repo_name:
-        description: "GitHub repo 名稱（用於組 PR URL，如 ai-agent-api）"
+        description: "專案名稱，用於通知標題和組 PR URL（如 ai-agent-api、mcp-server）"
         required: true
         type: string
       deploy_result:
@@ -116,7 +112,7 @@ jobs:
           # === 組 PR URL ===
           pr_url=""
           if [ -n "${{ inputs.pr_number }}" ]; then
-            pr_url="https://github.com/KedingTW/${{ inputs.repo_name }}/pull/${{ inputs.pr_number }}"
+            pr_url="https://github.com/KedingTW/${{ inputs.project_name }}/pull/${{ inputs.pr_number }}"
           fi
 
           # === 構建通知內容 ===
