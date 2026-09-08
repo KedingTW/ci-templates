@@ -15,6 +15,8 @@
 #   hsuan  → 11020550（吳珈瑄）
 #   darren → 11110577（楊詠仁）
 #   sherry → 11020955（林潔庭）
+#   jackie → TW0707
+#   yuxi   → TW0778
 #
 # 成功通知格式：
 #   ✅ [{project_name}] {env}
@@ -135,6 +137,8 @@ jobs:
                 hsuan) mention="<@11020550>" ;;
                 darren) mention="<@11110577>" ;;
                 sherry) mention="<@11020955>" ;;
+                jackie) mention="<@TW0707>" ;;
+                yuxi) mention="<@TW0778>" ;;
               esac
 
               if [ -n "$mention" ]; then
